@@ -5,11 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Link Launcher</title>
 
-  <!-- Helps iOS "Add to Home Screen" feel more app-like -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="theme-color" content="#000000">
-
   <style>
     :root {
       --bg: #000;
@@ -20,6 +15,9 @@
       --gap: clamp(10px, 2.2vw, 18px);
       --radius: 18px;
       --shadow: 0 10px 30px rgba(0,0,0,.45);
+
+      --fab-bg: rgba(20,20,20,.9);
+      --fab-border: rgba(255,255,255,.12);
     }
 
     html, body {
@@ -59,7 +57,7 @@
       white-space: nowrap;
     }
 
-    /* Kiosk mode hides header */
+    /* Kiosk mode hides header: ?kiosk=1 */
     body.kiosk header { display: none; }
 
     main {
@@ -71,8 +69,6 @@
       justify-content: stretch;
       /* columns set dynamically via JS */
     }
-
-    body.kiosk main { padding: var(--gap); }
 
     .tile {
       display: flex;
@@ -109,17 +105,16 @@
       outline-offset: 3px;
     }
 
-    /* Overlay */
+    /* Overlay for loading/errors only */
     #overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,.90);
+      background: rgba(0,0,0,.85);
       display: none;
       align-items: center;
       justify-content: center;
       padding: 18px;
       z-index: 50;
-      backdrop-filter: blur(2px);
     }
     #overlay.show { display: flex; }
 
@@ -167,19 +162,40 @@
     button:active { transform: scale(0.99); }
     button:hover { background: #1c1c1c; }
 
-    code {
-      background: #111;
-      border: 1px solid #2a2a2a;
-      border-radius: 8px;
-      padding: 2px 6px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
+    /* Floating fullscreen button */
+    #fullscreenBtn {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 40;
+
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+
+      padding: 10px 12px;
+      border-radius: 999px;
+
+      background: var(--fab-bg);
+      border: 1px solid var(--fab-border);
+      color: var(--fg);
+
+      font-weight: 700;
+      font-size: 13px;
+
+      box-shadow: 0 12px 30px rgba(0,0,0,.45);
+      backdrop-filter: blur(6px);
+
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* A "tap anywhere" overlay style (minimal) */
-    body.kiosk #overlay .card {
-      width: min(620px, 100%);
-    }
+    #fullscreenBtn:active { transform: scale(0.985); }
+    #fullscreenBtn.hidden { display: none; }
+
+    /* If you want the button hidden in kiosk mode, uncomment:
+    body.kiosk #fullscreenBtn { display: none; }
+    */
   </style>
 </head>
 
@@ -192,6 +208,10 @@
     <main id="grid" aria-label="Link grid"></main>
   </div>
 
+  <button id="fullscreenBtn" type="button" aria-label="Enter fullscreen">
+    ⛶ Fullscreen
+  </button>
+
   <div id="overlay" role="dialog" aria-modal="true" aria-label="Status overlay">
     <div class="card">
       <h2 id="overlayTitle">Loading…</h2>
@@ -203,9 +223,6 @@
 
 <script>
 (() => {
-  // ---------------------------
-  // URL params
-  // ---------------------------
   const params = new URLSearchParams(location.search);
 
   // Optional: kiosk mode (hides header). Use ?kiosk=1
@@ -225,9 +242,7 @@
   const grid = document.getElementById("grid");
   const meta = document.getElementById("meta");
 
-  // ---------------------------
-  // Overlay helpers
-  // ---------------------------
+  // Overlay
   const overlay = document.getElementById("overlay");
   const overlayTitle = document.getElementById("overlayTitle");
   const overlayText = document.getElementById("overlayText");
@@ -252,9 +267,9 @@
     overlay.classList.remove("show");
   }
 
-  // ---------------------------
-  // Fullscreen helper
-  // ---------------------------
+  // Fullscreen button
+  const fullscreenBtn = document.getElementById("fullscreenBtn");
+
   async function requestFullscreen() {
     const el = document.documentElement;
     if (!document.fullscreenElement && el.requestFullscreen) {
@@ -262,28 +277,27 @@
     }
   }
 
-  // Optional: keep screen awake (best-effort, supported on some browsers)
-  let wakeLock = null;
-  async function requestWakeLock() {
-    try {
-      if ("wakeLock" in navigator) {
-        wakeLock = await navigator.wakeLock.request("screen");
-      }
-    } catch (_) {}
+  async function exitFullscreen() {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      try { await document.exitFullscreen(); } catch (_) {}
+    }
   }
 
-  // Remember preference locally
-  const FS_KEY = "linkLauncher.fullscreenPreferred";
-  function fullscreenPreferred() {
-    return localStorage.getItem(FS_KEY) === "1";
-  }
-  function setFullscreenPreferred(val) {
-    localStorage.setItem(FS_KEY, val ? "1" : "0");
+  function updateFullscreenButton() {
+    const inFs = !!document.fullscreenElement;
+    fullscreenBtn.textContent = inFs ? "⤫ Exit fullscreen" : "⛶ Fullscreen";
   }
 
-  // ---------------------------
-  // CSV parsing (supports quotes + commas)
-  // ---------------------------
+  fullscreenBtn.addEventListener("click", async () => {
+    if (document.fullscreenElement) await exitFullscreen();
+    else await requestFullscreen();
+    updateFullscreenButton();
+  });
+
+  document.addEventListener("fullscreenchange", updateFullscreenButton);
+  updateFullscreenButton();
+
+  // CSV parser (supports quotes)
   function parseCSV(text) {
     const rows = [];
     let i = 0, field = "", row = [], inQuotes = false;
@@ -318,7 +332,6 @@
     return rows;
   }
 
-  // If Google gives "https://www.google.com/url?q=<REAL>&..." unwrap it.
   function unwrapGoogleRedirect(url) {
     try {
       const u = new URL(url);
@@ -330,9 +343,7 @@
     return url;
   }
 
-  // ---------------------------
-  // Layout: choose columns based on item count
-  // ---------------------------
+  // Layout
   function setGridColumns(count) {
     let cols = Math.ceil(Math.sqrt(count || 1));
     cols = Math.max(1, Math.min(cols, 6));
@@ -344,9 +355,6 @@
     grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   }
 
-  // ---------------------------
-  // Build tiles
-  // ---------------------------
   function buildTiles(items) {
     grid.innerHTML = "";
     setGridColumns(items.length);
@@ -358,13 +366,6 @@
       a.href = item.url;
       a.target = "_self";
       a.rel = "noopener";
-
-      // best-effort: if user interacts with tile, attempt fullscreen
-      a.addEventListener("click", () => {
-        requestFullscreen();
-        requestWakeLock();
-      }, { once: true });
-
       grid.appendChild(a);
     }
 
@@ -376,47 +377,7 @@
     setGridColumns(count);
   });
 
-  // ---------------------------
-  // "Tap to start" overlay (lets us enter fullscreen reliably)
-  // ---------------------------
-  function showTapToStartOverlay(mode) {
-    // mode: "first" (ask preference), "returning" (just start)
-    if (mode === "returning") {
-      showOverlay({
-        title: "Tap to start",
-        text: kiosk ? "Tap once to enter fullscreen." : "Tap once to enter fullscreen (remembered).",
-        hint: kiosk ? "" : "Browsers require a tap for fullscreen.",
-        actions: [{ label: "Start", onClick: async () => {
-          await requestFullscreen();
-          await requestWakeLock();
-          hideOverlay();
-        }}]
-      });
-      return;
-    }
-
-    showOverlay({
-      title: "Fullscreen?",
-      text: "Do you want this launcher to open in fullscreen on this device?",
-      hint: "Browsers require a tap for fullscreen. We’ll remember your choice.",
-      actions: [
-        { label: "Yes (fullscreen)", onClick: async () => {
-          setFullscreenPreferred(true);
-          await requestFullscreen();
-          await requestWakeLock();
-          hideOverlay();
-        }},
-        { label: "No", onClick: () => {
-          setFullscreenPreferred(false);
-          hideOverlay();
-        }}
-      ]
-    });
-  }
-
-  // ---------------------------
-  // Main
-  // ---------------------------
+  // Main load
   async function load() {
     showOverlay({
       title: "Loading…",
@@ -461,19 +422,6 @@
 
     hideOverlay();
     buildTiles(items);
-
-    // Fullscreen behavior:
-    // - If preferred, show a single-tap "Start" (so next time it’s one tap).
-    // - If not set yet, ask once and remember.
-    if (fullscreenPreferred()) {
-      showTapToStartOverlay("returning");
-    } else {
-      // If user previously chose "No", don't ask again.
-      // If key absent, ask once. If key exists and is "0", do nothing.
-      if (localStorage.getItem(FS_KEY) === null) {
-        showTapToStartOverlay("first");
-      }
-    }
   }
 
   load();
