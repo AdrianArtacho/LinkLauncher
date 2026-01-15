@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Link Launcher</title>
 
+  <!-- Helps iOS "Add to Home Screen" feel more app-like -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#000000">
+
   <style>
     :root {
       --bg: #000;
@@ -25,11 +30,11 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Fullscreen app shell */
     #app {
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      background: var(--bg);
     }
 
     header {
@@ -54,7 +59,9 @@
       white-space: nowrap;
     }
 
-    /* Grid area takes the rest */
+    /* Kiosk mode hides header */
+    body.kiosk header { display: none; }
+
     main {
       flex: 1;
       display: grid;
@@ -64,6 +71,8 @@
       justify-content: stretch;
       /* columns set dynamically via JS */
     }
+
+    body.kiosk main { padding: var(--gap); }
 
     .tile {
       display: flex;
@@ -83,10 +92,7 @@
       font-weight: 700;
       color: var(--fg);
 
-      /* Make tiles feel big + tappable */
       min-height: 90px;
-
-      /* responsive text */
       font-size: clamp(14px, 2.8vw, 26px);
       line-height: 1.1;
 
@@ -103,18 +109,18 @@
       outline-offset: 3px;
     }
 
-    /* Loading / error overlay */
+    /* Overlay */
     #overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,.85);
+      background: rgba(0,0,0,.90);
       display: none;
       align-items: center;
       justify-content: center;
       padding: 18px;
       z-index: 50;
+      backdrop-filter: blur(2px);
     }
-
     #overlay.show { display: flex; }
 
     .card {
@@ -137,6 +143,7 @@
       line-height: 1.35;
       opacity: .92;
       word-break: break-word;
+      white-space: pre-wrap;
     }
 
     .row {
@@ -168,6 +175,11 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       font-size: 12px;
     }
+
+    /* A "tap anywhere" overlay style (minimal) */
+    body.kiosk #overlay .card {
+      width: min(620px, 100%);
+    }
   </style>
 </head>
 
@@ -196,14 +208,17 @@
   // ---------------------------
   const params = new URLSearchParams(location.search);
 
-  // Default CSV (you can replace this with your own default if you want)
+  // Optional: kiosk mode (hides header). Use ?kiosk=1
+  const kiosk = params.get("kiosk") === "1";
+  if (kiosk) document.body.classList.add("kiosk");
+
+  // Default CSV (replace if you want)
   const DEFAULT_CSV =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgmBOH1S8hMprCGM9X5v6sJwzPDj_EhHgrsiIGW97Nr7l7TzvQ2i5CuXT5Fg_zOpPDdjqCJM_LooFM/pub?gid=0&single=true&output=csv";
 
   const csvUrl = params.get("csv") || DEFAULT_CSV;
   const title = params.get("title") || "Link Launcher";
 
-  // Title in page + header
   document.title = title;
   document.getElementById("pageTitle").textContent = title;
 
@@ -239,7 +254,6 @@
 
   // ---------------------------
   // Fullscreen helper
-  // (Most browsers require user gesture; we prompt once.)
   // ---------------------------
   async function requestFullscreen() {
     const el = document.documentElement;
@@ -248,9 +262,27 @@
     }
   }
 
+  // Optional: keep screen awake (best-effort, supported on some browsers)
+  let wakeLock = null;
+  async function requestWakeLock() {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLock = await navigator.wakeLock.request("screen");
+      }
+    } catch (_) {}
+  }
+
+  // Remember preference locally
+  const FS_KEY = "linkLauncher.fullscreenPreferred";
+  function fullscreenPreferred() {
+    return localStorage.getItem(FS_KEY) === "1";
+  }
+  function setFullscreenPreferred(val) {
+    localStorage.setItem(FS_KEY, val ? "1" : "0");
+  }
+
   // ---------------------------
-  // CSV parsing (simple + robust)
-  // Supports quoted fields with commas.
+  // CSV parsing (supports quotes + commas)
   // ---------------------------
   function parseCSV(text) {
     const rows = [];
@@ -261,7 +293,6 @@
 
       if (inQuotes) {
         if (c === '"') {
-          // Escaped quote?
           if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
           inQuotes = false; i++; continue;
         }
@@ -279,7 +310,7 @@
         field += c; i++; continue;
       }
     }
-    // flush last field
+
     if (field.length || row.length) {
       row.push(field);
       rows.push(row);
@@ -300,15 +331,12 @@
   }
 
   // ---------------------------
-  // Layout: choose columns based on item count.
-  // We aim for a near-square grid (big tappable tiles).
+  // Layout: choose columns based on item count
   // ---------------------------
   function setGridColumns(count) {
-    // Choose columns as ceil(sqrt(n)), but keep sane bounds.
     let cols = Math.ceil(Math.sqrt(count || 1));
-    cols = Math.max(1, Math.min(cols, 6)); // up to 6 columns on big screens
+    cols = Math.max(1, Math.min(cols, 6));
 
-    // On very narrow screens, limit columns so tiles stay big.
     const w = Math.min(window.innerWidth, window.screen?.width || window.innerWidth);
     if (w < 420) cols = Math.min(cols, 2);
     else if (w < 720) cols = Math.min(cols, 3);
@@ -331,10 +359,10 @@
       a.target = "_self";
       a.rel = "noopener";
 
-      // Optional: attempt fullscreen on first interaction
+      // best-effort: if user interacts with tile, attempt fullscreen
       a.addEventListener("click", () => {
-        // fullscreen will only work if browser allows it
         requestFullscreen();
+        requestWakeLock();
       }, { once: true });
 
       grid.appendChild(a);
@@ -343,11 +371,48 @@
     meta.textContent = `${items.length} link${items.length === 1 ? "" : "s"}`;
   }
 
-  // Recompute columns on resize
   window.addEventListener("resize", () => {
     const count = grid.children.length || 1;
     setGridColumns(count);
   });
+
+  // ---------------------------
+  // "Tap to start" overlay (lets us enter fullscreen reliably)
+  // ---------------------------
+  function showTapToStartOverlay(mode) {
+    // mode: "first" (ask preference), "returning" (just start)
+    if (mode === "returning") {
+      showOverlay({
+        title: "Tap to start",
+        text: kiosk ? "Tap once to enter fullscreen." : "Tap once to enter fullscreen (remembered).",
+        hint: kiosk ? "" : "Browsers require a tap for fullscreen.",
+        actions: [{ label: "Start", onClick: async () => {
+          await requestFullscreen();
+          await requestWakeLock();
+          hideOverlay();
+        }}]
+      });
+      return;
+    }
+
+    showOverlay({
+      title: "Fullscreen?",
+      text: "Do you want this launcher to open in fullscreen on this device?",
+      hint: "Browsers require a tap for fullscreen. We’ll remember your choice.",
+      actions: [
+        { label: "Yes (fullscreen)", onClick: async () => {
+          setFullscreenPreferred(true);
+          await requestFullscreen();
+          await requestWakeLock();
+          hideOverlay();
+        }},
+        { label: "No", onClick: () => {
+          setFullscreenPreferred(false);
+          hideOverlay();
+        }}
+      ]
+    });
+  }
 
   // ---------------------------
   // Main
@@ -370,14 +435,11 @@
         title: "Couldn’t load CSV",
         text: "Fetch failed. Make sure the Google Sheet is published as CSV and the URL is public.",
         hint: `Error: ${String(err)}\nCSV: ${csvUrl}`,
-        actions: [
-          { label: "Retry", onClick: () => load() }
-        ]
+        actions: [{ label: "Retry", onClick: () => load() }]
       });
       return;
     }
 
-    // Parse CSV rows -> items (label, url)
     const rows = parseCSV(text)
       .map(r => [ (r[0] || "").trim(), (r[1] || "").trim() ])
       .filter(([label, url]) => label && url);
@@ -400,17 +462,18 @@
     hideOverlay();
     buildTiles(items);
 
-    // Fullscreen prompt (since auto fullscreen is blocked)
-    // Show a small overlay only once, encouraging a tap for fullscreen.
-    showOverlay({
-      title: "Tap once for fullscreen",
-      text: "Some browsers only allow fullscreen after a user gesture.",
-      hint: "You can also just start tapping a button—either way works.",
-      actions: [
-        { label: "Go fullscreen", onClick: async () => { await requestFullscreen(); hideOverlay(); } },
-        { label: "Continue", onClick: () => hideOverlay() }
-      ]
-    });
+    // Fullscreen behavior:
+    // - If preferred, show a single-tap "Start" (so next time it’s one tap).
+    // - If not set yet, ask once and remember.
+    if (fullscreenPreferred()) {
+      showTapToStartOverlay("returning");
+    } else {
+      // If user previously chose "No", don't ask again.
+      // If key absent, ask once. If key exists and is "0", do nothing.
+      if (localStorage.getItem(FS_KEY) === null) {
+        showTapToStartOverlay("first");
+      }
+    }
   }
 
   load();
