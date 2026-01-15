@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link Launcher</title>
+
+  <style>
+    :root {
+      --bg: #000;
+      --fg: #fff;
+      --tile-bg: #111;
+      --tile-bg-hover: #1a1a1a;
+      --tile-border: #2a2a2a;
+      --gap: clamp(10px, 2.2vw, 18px);
+      --radius: 18px;
+      --shadow: 0 10px 30px rgba(0,0,0,.45);
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Fullscreen app shell */
+    #app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 14px 16px 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(16px, 2.2vw, 20px);
+      font-weight: 600;
+      letter-spacing: .2px;
+      opacity: .95;
+    }
+
+    header .meta {
+      font-size: 12px;
+      opacity: .7;
+      white-space: nowrap;
+    }
+
+    /* Grid area takes the rest */
+    main {
+      flex: 1;
+      display: grid;
+      padding: var(--gap);
+      gap: var(--gap);
+      align-content: stretch;
+      justify-content: stretch;
+      /* columns set dynamically via JS */
+    }
+
+    .tile {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      text-decoration: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+
+      background: var(--tile-bg);
+      border: 1px solid var(--tile-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+
+      padding: 14px;
+      font-weight: 700;
+      color: var(--fg);
+
+      /* Make tiles feel big + tappable */
+      min-height: 90px;
+
+      /* responsive text */
+      font-size: clamp(14px, 2.8vw, 26px);
+      line-height: 1.1;
+
+      transition: transform .08s ease, background .08s ease;
+    }
+
+    .tile:active {
+      transform: scale(0.985);
+      background: var(--tile-bg-hover);
+    }
+
+    .tile:focus-visible {
+      outline: 3px solid rgba(255,255,255,.25);
+      outline-offset: 3px;
+    }
+
+    /* Loading / error overlay */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 50;
+    }
+
+    #overlay.show { display: flex; }
+
+    .card {
+      width: min(680px, 100%);
+      background: #0d0d0d;
+      border: 1px solid #2a2a2a;
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.55);
+    }
+
+    .card h2 {
+      margin: 0 0 8px 0;
+      font-size: 18px;
+    }
+
+    .card p {
+      margin: 8px 0;
+      font-size: 14px;
+      line-height: 1.35;
+      opacity: .92;
+      word-break: break-word;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid #2a2a2a;
+      background: #161616;
+      color: white;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    button:active { transform: scale(0.99); }
+    button:hover { background: #1c1c1c; }
+
+    code {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 2px 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <header>
+      <h1 id="pageTitle">Link Launcher</h1>
+      <div class="meta" id="meta"></div>
+    </header>
+    <main id="grid" aria-label="Link grid"></main>
+  </div>
+
+  <div id="overlay" role="dialog" aria-modal="true" aria-label="Status overlay">
+    <div class="card">
+      <h2 id="overlayTitle">Loading…</h2>
+      <p id="overlayText">Fetching your CSV…</p>
+      <p id="overlayHint" style="opacity:.75"></p>
+      <div class="row" id="overlayActions"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ---------------------------
+  // URL params
+  // ---------------------------
+  const params = new URLSearchParams(location.search);
+
+  // Default CSV (you can replace this with your own default if you want)
+  const DEFAULT_CSV =
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgmBOH1S8hMprCGM9X5v6sJwzPDj_EhHgrsiIGW97Nr7l7TzvQ2i5CuXT5Fg_zOpPDdjqCJM_LooFM/pub?gid=0&single=true&output=csv";
+
+  const csvUrl = params.get("csv") || DEFAULT_CSV;
+  const title = params.get("title") || "Link Launcher";
+
+  // Title in page + header
+  document.title = title;
+  document.getElementById("pageTitle").textContent = title;
+
+  const grid = document.getElementById("grid");
+  const meta = document.getElementById("meta");
+
+  // ---------------------------
+  // Overlay helpers
+  // ---------------------------
+  const overlay = document.getElementById("overlay");
+  const overlayTitle = document.getElementById("overlayTitle");
+  const overlayText = document.getElementById("overlayText");
+  const overlayHint = document.getElementById("overlayHint");
+  const overlayActions = document.getElementById("overlayActions");
+
+  function showOverlay({ title, text, hint = "", actions = [] }) {
+    overlayTitle.textContent = title;
+    overlayText.textContent = text;
+    overlayHint.textContent = hint;
+    overlayActions.innerHTML = "";
+    for (const a of actions) {
+      const btn = document.createElement("button");
+      btn.textContent = a.label;
+      btn.addEventListener("click", a.onClick);
+      overlayActions.appendChild(btn);
+    }
+    overlay.classList.add("show");
+  }
+
+  function hideOverlay() {
+    overlay.classList.remove("show");
+  }
+
+  // ---------------------------
+  // Fullscreen helper
+  // (Most browsers require user gesture; we prompt once.)
+  // ---------------------------
+  async function requestFullscreen() {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) {
+      try { await el.requestFullscreen(); } catch (_) {}
+    }
+  }
+
+  // ---------------------------
+  // CSV parsing (simple + robust)
+  // Supports quoted fields with commas.
+  // ---------------------------
+  function parseCSV(text) {
+    const rows = [];
+    let i = 0, field = "", row = [], inQuotes = false;
+
+    while (i < text.length) {
+      const c = text[i];
+
+      if (inQuotes) {
+        if (c === '"') {
+          // Escaped quote?
+          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+          inQuotes = false; i++; continue;
+        }
+        field += c; i++; continue;
+      } else {
+        if (c === '"') { inQuotes = true; i++; continue; }
+        if (c === ',') { row.push(field); field = ""; i++; continue; }
+        if (c === '\n') {
+          row.push(field); field = "";
+          rows.push(row);
+          row = [];
+          i++; continue;
+        }
+        if (c === '\r') { i++; continue; }
+        field += c; i++; continue;
+      }
+    }
+    // flush last field
+    if (field.length || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  // If Google gives "https://www.google.com/url?q=<REAL>&..." unwrap it.
+  function unwrapGoogleRedirect(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname === "www.google.com" && u.pathname === "/url") {
+        const q = u.searchParams.get("q");
+        if (q) return q;
+      }
+    } catch (_) {}
+    return url;
+  }
+
+  // ---------------------------
+  // Layout: choose columns based on item count.
+  // We aim for a near-square grid (big tappable tiles).
+  // ---------------------------
+  function setGridColumns(count) {
+    // Choose columns as ceil(sqrt(n)), but keep sane bounds.
+    let cols = Math.ceil(Math.sqrt(count || 1));
+    cols = Math.max(1, Math.min(cols, 6)); // up to 6 columns on big screens
+
+    // On very narrow screens, limit columns so tiles stay big.
+    const w = Math.min(window.innerWidth, window.screen?.width || window.innerWidth);
+    if (w < 420) cols = Math.min(cols, 2);
+    else if (w < 720) cols = Math.min(cols, 3);
+
+    grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  }
+
+  // ---------------------------
+  // Build tiles
+  // ---------------------------
+  function buildTiles(items) {
+    grid.innerHTML = "";
+    setGridColumns(items.length);
+
+    for (const item of items) {
+      const a = document.createElement("a");
+      a.className = "tile";
+      a.textContent = item.label;
+      a.href = item.url;
+      a.target = "_self";
+      a.rel = "noopener";
+
+      // Optional: attempt fullscreen on first interaction
+      a.addEventListener("click", () => {
+        // fullscreen will only work if browser allows it
+        requestFullscreen();
+      }, { once: true });
+
+      grid.appendChild(a);
+    }
+
+    meta.textContent = `${items.length} link${items.length === 1 ? "" : "s"}`;
+  }
+
+  // Recompute columns on resize
+  window.addEventListener("resize", () => {
+    const count = grid.children.length || 1;
+    setGridColumns(count);
+  });
+
+  // ---------------------------
+  // Main
+  // ---------------------------
+  async function load() {
+    showOverlay({
+      title: "Loading…",
+      text: "Fetching CSV…",
+      hint: `CSV: ${csvUrl}`,
+      actions: []
+    });
+
+    let text;
+    try {
+      const res = await fetch(csvUrl, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      text = await res.text();
+    } catch (err) {
+      showOverlay({
+        title: "Couldn’t load CSV",
+        text: "Fetch failed. Make sure the Google Sheet is published as CSV and the URL is public.",
+        hint: `Error: ${String(err)}\nCSV: ${csvUrl}`,
+        actions: [
+          { label: "Retry", onClick: () => load() }
+        ]
+      });
+      return;
+    }
+
+    // Parse CSV rows -> items (label, url)
+    const rows = parseCSV(text)
+      .map(r => [ (r[0] || "").trim(), (r[1] || "").trim() ])
+      .filter(([label, url]) => label && url);
+
+    const items = rows.map(([label, url]) => ({
+      label,
+      url: unwrapGoogleRedirect(url)
+    }));
+
+    if (!items.length) {
+      showOverlay({
+        title: "No links found",
+        text: "Your CSV seems empty (or missing the first two columns).",
+        hint: "Expected: Column A = label, Column B = URL.",
+        actions: []
+      });
+      return;
+    }
+
+    hideOverlay();
+    buildTiles(items);
+
+    // Fullscreen prompt (since auto fullscreen is blocked)
+    // Show a small overlay only once, encouraging a tap for fullscreen.
+    showOverlay({
+      title: "Tap once for fullscreen",
+      text: "Some browsers only allow fullscreen after a user gesture.",
+      hint: "You can also just start tapping a button—either way works.",
+      actions: [
+        { label: "Go fullscreen", onClick: async () => { await requestFullscreen(); hideOverlay(); } },
+        { label: "Continue", onClick: () => hideOverlay() }
+      ]
+    });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
