@@ -105,7 +105,7 @@
       outline-offset: 3px;
     }
 
-    /* Overlay for loading/errors only */
+    /* Overlay for errors only (we don't block startup if cache exists) */
     #overlay {
       position: fixed;
       inset: 0;
@@ -192,10 +192,6 @@
 
     #fullscreenBtn:active { transform: scale(0.985); }
     #fullscreenBtn.hidden { display: none; }
-
-    /* If you want the button hidden in kiosk mode, uncomment:
-    body.kiosk #fullscreenBtn { display: none; }
-    */
   </style>
 </head>
 
@@ -214,8 +210,8 @@
 
   <div id="overlay" role="dialog" aria-modal="true" aria-label="Status overlay">
     <div class="card">
-      <h2 id="overlayTitle">Loading…</h2>
-      <p id="overlayText">Fetching your CSV…</p>
+      <h2 id="overlayTitle">Couldn’t load CSV</h2>
+      <p id="overlayText">Fetch failed. Make sure the Google Sheet is published as CSV and the URL is public.</p>
       <p id="overlayHint" style="opacity:.75"></p>
       <div class="row" id="overlayActions"></div>
     </div>
@@ -242,16 +238,14 @@
   const grid = document.getElementById("grid");
   const meta = document.getElementById("meta");
 
-  // Overlay
+  // ---------------------------
+  // Overlay (errors only)
+  // ---------------------------
   const overlay = document.getElementById("overlay");
-  const overlayTitle = document.getElementById("overlayTitle");
-  const overlayText = document.getElementById("overlayText");
   const overlayHint = document.getElementById("overlayHint");
   const overlayActions = document.getElementById("overlayActions");
 
-  function showOverlay({ title, text, hint = "", actions = [] }) {
-    overlayTitle.textContent = title;
-    overlayText.textContent = text;
+  function showErrorOverlay({ hint = "", actions = [] }) {
     overlayHint.textContent = hint;
     overlayActions.innerHTML = "";
     for (const a of actions) {
@@ -267,7 +261,9 @@
     overlay.classList.remove("show");
   }
 
+  // ---------------------------
   // Fullscreen button
+  // ---------------------------
   const fullscreenBtn = document.getElementById("fullscreenBtn");
 
   async function requestFullscreen() {
@@ -297,7 +293,9 @@
   document.addEventListener("fullscreenchange", updateFullscreenButton);
   updateFullscreenButton();
 
+  // ---------------------------
   // CSV parser (supports quotes)
+  // ---------------------------
   function parseCSV(text) {
     const rows = [];
     let i = 0, field = "", row = [], inQuotes = false;
@@ -343,7 +341,20 @@
     return url;
   }
 
+  function parseItemsFromCSVText(text) {
+    const rows = parseCSV(text)
+      .map(r => [ (r[0] || "").trim(), (r[1] || "").trim() ])
+      .filter(([label, url]) => label && url);
+
+    return rows.map(([label, url]) => ({
+      label,
+      url: unwrapGoogleRedirect(url)
+    }));
+  }
+
+  // ---------------------------
   // Layout
+  // ---------------------------
   function setGridColumns(count) {
     let cols = Math.ceil(Math.sqrt(count || 1));
     cols = Math.max(1, Math.min(cols, 6));
@@ -355,7 +366,7 @@
     grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   }
 
-  function buildTiles(items) {
+  function buildTiles(items, { sourceLabel = "" } = {}) {
     grid.innerHTML = "";
     setGridColumns(items.length);
 
@@ -369,7 +380,9 @@
       grid.appendChild(a);
     }
 
-    meta.textContent = `${items.length} link${items.length === 1 ? "" : "s"}`;
+    const n = items.length;
+    const suffix = sourceLabel ? ` • ${sourceLabel}` : "";
+    meta.textContent = `${n} link${n === 1 ? "" : "s"}${suffix}`;
   }
 
   window.addEventListener("resize", () => {
@@ -377,54 +390,140 @@
     setGridColumns(count);
   });
 
-  // Main load
-  async function load() {
-    showOverlay({
-      title: "Loading…",
-      text: "Fetching CSV…",
-      hint: `CSV: ${csvUrl}`,
-      actions: []
-    });
-
-    let text;
-    try {
-      const res = await fetch(csvUrl, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      text = await res.text();
-    } catch (err) {
-      showOverlay({
-        title: "Couldn’t load CSV",
-        text: "Fetch failed. Make sure the Google Sheet is published as CSV and the URL is public.",
-        hint: `Error: ${String(err)}\nCSV: ${csvUrl}`,
-        actions: [{ label: "Retry", onClick: () => load() }]
-      });
-      return;
-    }
-
-    const rows = parseCSV(text)
-      .map(r => [ (r[0] || "").trim(), (r[1] || "").trim() ])
-      .filter(([label, url]) => label && url);
-
-    const items = rows.map(([label, url]) => ({
-      label,
-      url: unwrapGoogleRedirect(url)
-    }));
-
-    if (!items.length) {
-      showOverlay({
-        title: "No links found",
-        text: "Your CSV seems empty (or missing the first two columns).",
-        hint: "Expected: Column A = label, Column B = URL.",
-        actions: []
-      });
-      return;
-    }
-
-    hideOverlay();
-    buildTiles(items);
+  // ---------------------------
+  // Cache (stale-while-revalidate)
+  // Cache is keyed per CSV URL so multiple launchers can coexist.
+  // ---------------------------
+  function cacheKeyFor(url) {
+    return "linkLauncher.cache.v1." + encodeURIComponent(url);
   }
 
-  load();
+  function loadCache(url) {
+    try {
+      const raw = localStorage.getItem(cacheKeyFor(url));
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || !Array.isArray(obj.items)) return null;
+      return obj;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function saveCache(url, items) {
+    try {
+      const obj = { ts: Date.now(), items };
+      localStorage.setItem(cacheKeyFor(url), JSON.stringify(obj));
+    } catch (_) {
+      // ignore storage errors (private mode / quota)
+    }
+  }
+
+  function formatAge(ts) {
+    if (!ts) return "";
+    const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    return `${h}h ago`;
+  }
+
+  // Compare items to decide whether to re-render
+  function sameItems(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i].label !== b[i].label) return false;
+      if (a[i].url !== b[i].url) return false;
+    }
+    return true;
+  }
+
+  // ---------------------------
+  // Fetch fresh data
+  // ---------------------------
+  async function fetchCSVText(url) {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  }
+
+  async function refreshInBackground({ hadCache }) {
+    try {
+      const text = await fetchCSVText(csvUrl);
+      const items = parseItemsFromCSVText(text);
+
+      if (!items.length) {
+        // If cache exists, keep it; otherwise show error overlay
+        if (!hadCache) {
+          showErrorOverlay({
+            hint: `No valid rows found.\nExpected: Column A = label, Column B = URL.\nCSV: ${csvUrl}`,
+            actions: [{ label: "Retry", onClick: () => location.reload() }]
+          });
+        }
+        return;
+      }
+
+      // Update UI only if changed vs what we currently show (or cache)
+      const current = loadCache(csvUrl);
+      const currentItems = current?.items || null;
+
+      saveCache(csvUrl, items);
+
+      // If the visible grid is already built from cache, update if it changed.
+      if (!sameItems(items, currentItems)) {
+        buildTiles(items, { sourceLabel: "live" });
+      } else {
+        // Still update meta label to show it's live
+        const n = items.length;
+        meta.textContent = `${n} link${n === 1 ? "" : "s"} • live`;
+      }
+
+      hideOverlay();
+    } catch (err) {
+      // If no cache, show error overlay; if cache exists, silently keep going.
+      if (!hadCache) {
+        showErrorOverlay({
+          hint: `Error: ${String(err)}\nCSV: ${csvUrl}`,
+          actions: [{ label: "Retry", onClick: () => location.reload() }]
+        });
+      } else {
+        // Optional: show a tiny hint in meta that we are offline/stale
+        const cached = loadCache(csvUrl);
+        if (cached?.items?.length) {
+          const n = cached.items.length;
+          meta.textContent = `${n} link${n === 1 ? "" : "s"} • cached (${formatAge(cached.ts)})`;
+        }
+      }
+    }
+  }
+
+  // ---------------------------
+  // Startup
+  // ---------------------------
+  function start() {
+    // 1) Render cached immediately if available
+    const cached = loadCache(csvUrl);
+    if (cached?.items?.length) {
+      buildTiles(cached.items, { sourceLabel: `cached (${formatAge(cached.ts)})` });
+      // no blocking overlay
+      hideOverlay();
+      // 2) Refresh in background
+      refreshInBackground({ hadCache: true });
+    } else {
+      // No cache: show overlay while loading
+      showErrorOverlay({
+        hint: `Loading…\nCSV: ${csvUrl}`,
+        actions: []
+      });
+      // Use the same overlay element; we'll hide it on success
+      // (We reuse the error overlay styling to avoid duplicating UI.)
+      refreshInBackground({ hadCache: false });
+    }
+  }
+
+  start();
 })();
 </script>
 </body>
