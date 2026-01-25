@@ -1,4 +1,4 @@
-# Link Launcher
+# 📱 Link Launcher
 
 **Link Launcher** is a lightweight, static, mobile-first web app designed to run on **GitHub Pages**.
 It turns a **public Google Spreadsheet (CSV)** into a **full-screen, tap-friendly grid of links**, ideal for performances, classrooms, installations, kiosks, or quick access hubs.
