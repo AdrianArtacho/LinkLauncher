@@ -18,6 +18,7 @@ No build step. No backend. Just HTML + CSS + JavaScript.
 * 🧠 **Remembers fullscreen preference** using `localStorage`
 * 🧱 Optional **kiosk mode** (no header, pure grid)
 * 🌐 Works perfectly on **GitHub Pages**
+* 🛟 [Helper page](helper.html) to encode the URL
 
 ---
 
