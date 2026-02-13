@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Link Launcher – URL Helper</title>
+
+  <style>
+    :root {
+      --bg: #000;
+      --fg: #fff;
+      --muted: #aaa;
+      --card: #111;
+      --border: #2a2a2a;
+      --accent: #4da3ff;
+      --radius: 16px;
+    }
+
+    html, body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 0 0 12px 0;
+      font-size: 24px;
+    }
+
+    p {
+      margin: 8px 0 16px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: var(--muted);
+    }
+
+    input, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      background: #0b0b0b;
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: #161616;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover { background: #1c1c1c; }
+    button:active { transform: scale(0.98); }
+
+    .result {
+      word-break: break-all;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      background: #0b0b0b;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    a.result-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    footer {
+      margin-top: 28px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>Link Launcher – URL Helper</h1>
+  <p>
+    Paste a <strong>Google Sheets CSV URL</strong> here.  
+    This tool will generate a <strong>correctly encoded</strong> LinkLauncher URL.
+  </p>
+
+  <div class="card">
+    <label for="csv">Google Sheets CSV URL</label>
+    <textarea id="csv" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?gid=0&single=true&output=csv"></textarea>
+  </div>
+
+  <div class="card">
+    <label for="title">Page title (optional)</label>
+    <input id="title" type="text" placeholder="e.g. Strohgasse">
+  </div>
+
+  <div class="card">
+    <label>Generated LinkLauncher URL</label>
+    <div id="result" class="result">—</div>
+    <div class="row">
+      <button id="copyBtn" disabled>Copy URL</button>
+      <a id="openLink" class="result-link" href="#" target="_blank" style="display:none;">
+        Open Link
+      </a>
+    </div>
+  </div>
+
+  <footer>
+    Tip: always publish your Google Sheet as <strong>CSV</strong> before using it here.
+  </footer>
+</main>
+
+<script>
+(() => {
+  const csvEl = document.getElementById("csv");
+  const titleEl = document.getElementById("title");
+  const resultEl = document.getElementById("result");
+  const copyBtn = document.getElementById("copyBtn");
+  const openLink = document.getElementById("openLink");
+
+  // Base URL = same folder as helper.html
+  const baseUrl = location.origin + location.pathname.replace(/helper\.html$/, "");
+
+  function update() {
+    const csv = csvEl.value.trim();
+    const title = titleEl.value.trim();
+
+    if (!csv) {
+      resultEl.textContent = "—";
+      copyBtn.disabled = true;
+      openLink.style.display = "none";
+      return;
+    }
+
+    const encodedCSV = encodeURIComponent(csv);
+    let url = `${baseUrl}?csv=${encodedCSV}`;
+
+    if (title) {
+      url += `&title=${encodeURIComponent(title)}`;
+    }
+
+    resultEl.textContent = url;
+    openLink.href = url;
+    openLink.style.display = "inline";
+    copyBtn.disabled = false;
+  }
+
+  csvEl.addEventListener("input", update);
+  titleEl.addEventListener("input", update);
+
+  copyBtn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(resultEl.textContent);
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => (copyBtn.textContent = "Copy URL"), 1200);
+    } catch {
+      alert("Copy failed – please copy manually.");
+    }
+  });
+})();
+</script>
+</body>
+</html>
