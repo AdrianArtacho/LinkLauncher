@@ -1,4 +1,4 @@
-# 📱 Link Launcher
+# 📱 [Link Launcher](https://adrianartacho.github.io/LinkLauncher/)
 
 **Link Launcher** is a lightweight, static, mobile-first web app designed to run on **GitHub Pages**.
 It turns a **public Google Spreadsheet (CSV)** into a **full-screen, tap-friendly grid of links**, ideal for performances, classrooms, installations, kiosks, or quick access hubs.
@@ -18,7 +18,7 @@ No build step. No backend. Just HTML + CSS + JavaScript.
 * 🧠 **Remembers fullscreen preference** using `localStorage`
 * 🧱 Optional **kiosk mode** (no header, pure grid)
 * 🌐 Works perfectly on **GitHub Pages**
-* 🛟 [Helper page](helper.html) to encode the URL
+* 🛟 [Helper page](https://adrianartacho.github.io/LinkLauncher/helper.html) to encode the URL...
 
 ---
 
