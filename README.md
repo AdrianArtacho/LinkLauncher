@@ -1,171 +1,138 @@
 # 📱 [Link Launcher](https://adrianartacho.github.io/LinkLauncher/)
 
-**Link Launcher** is a lightweight, static, mobile-first web app designed to run on **GitHub Pages**.
-It turns a **public Google Spreadsheet (CSV)** into a **full-screen, tap-friendly grid of links**, ideal for performances, classrooms, installations, kiosks, or quick access hubs.
+**Link Launcher** turns a published Google Sheets CSV into a full-screen,
+tap-friendly grid of links for performances, classrooms, installations, kiosks,
+and personal launch pages.
 
-No build step. No backend. Just HTML + CSS + JavaScript.
+It is a static GitHub Pages app with no build step and no backend.
 
----
+> [!IMPORTANT]
+> A Google Sheet published as CSV is public. Link Launcher now prevents the bare
+> app URL from revealing a configured sheet and reduces accidental URL leakage,
+> but it does not authenticate visitors. Do not publish confidential, personal,
+> or student data with this setup.
 
 ## ✨ Features
 
-* 📄 **Reads links from a Google Sheets CSV**
-* 📱 **Optimized for smartphones & tablets**
-* ⬛ **Black, minimal, distraction-free UI**
-* 🔲 **Automatically adapts layout** to number of rows
-* 🖐️ **Big, tappable buttons**
-* 🖥️ **Fullscreen-friendly** (with remembered user consent)
-* 🧠 **Remembers fullscreen preference** using `localStorage`
-* 🧱 Optional **kiosk mode** (no header, pure grid)
-* 🌐 Works perfectly on **GitHub Pages**
-* 🛟 [Helper page](https://adrianartacho.github.io/LinkLauncher/helper.html) to encode the URL...
-
----
+- Loads only an explicitly configured CSV; the bare app reveals no dataset
+- Keeps configuration in the URL fragment rather than the HTTP query
+- Does not persist the CSV URL or its contents in browser storage
+- Clears private data cached by older Link Launcher releases
+- Rejects malformed and unsafe destination schemes
+- Sends no referrer when fetching the CSV or opening a tile
+- Provides a mobile-first, responsive grid and optional kiosk mode
+- Includes a [setup helper](https://adrianartacho.github.io/LinkLauncher/helper.html)
+- Supports fullscreen and a deliberately safe, unconfigured install entry point
 
 ## 📊 Spreadsheet format
 
-The Google Sheet must be **published as CSV** and follow this structure:
+Only the first two columns are used. Empty rows are ignored.
 
-| Column A (Label) | Column B (URL)                             |
-| ---------------- | ------------------------------------------ |
-| Website          | [https://example.com](https://example.com) |
-| Score PDF        | https://…                                  |
-| Video            | https://…                                  |
+| Column A (label) | Column B (URL) |
+| --- | --- |
+| Website | https://example.com |
+| Score PDF | https://example.com/score.pdf |
+| Call venue | tel:+431234567 |
 
-Only the **first two columns** are used.
-Empty rows are ignored.
+Allowed destination schemes are HTTPS, HTTP, mailto, and tel. Unsafe schemes
+such as javascript and data are skipped.
 
-### How to publish a Google Sheet as CSV
+### Publish a Google Sheet as CSV
 
-1. Open the sheet
-2. **File → Share → Publish to web**
-3. Choose:
+1. Open the sheet.
+2. Choose **File → Share → Publish to web**.
+3. Select the desired sheet tab and **CSV** as the format.
+4. Copy the generated URL.
 
-   * Sheet: the desired tab
-   * Format: **CSV**
-4. Copy the generated URL
-   It will look like:
+It should resemble:
 
-```
+~~~text
 https://docs.google.com/spreadsheets/d/e/.../pub?gid=0&single=true&output=csv
-```
+~~~
 
----
+## 🚀 Create a launcher link
 
-## 🚀 Usage
+The easiest method is the
+[setup helper](https://adrianartacho.github.io/LinkLauncher/helper.html).
+It validates the CSV address and creates the correctly encoded link locally in
+your browser.
 
-### Basic usage (default title)
+The resulting form is:
 
-```
-https://<username>.github.io/<repo>/?csv=<CSV_URL>
-```
+~~~text
+https://<username>.github.io/<repo>/#csv=<ENCODED_CSV_URL>
+~~~
 
-### Custom page title
+Optional title and kiosk settings use the same fragment:
 
-```
-https://<username>.github.io/<repo>/
-  ?csv=<CSV_URL>
-  &title=My%20Links
-```
+~~~text
+https://<username>.github.io/<repo>/#csv=<ENCODED_CSV_URL>&title=My+Links&kiosk=1
+~~~
 
-### Kiosk mode (no header)
+Always keep the leading #. A fragment is processed in the browser and is not
+sent to GitHub Pages as part of the page request.
 
-```
-https://<username>.github.io/<repo>/
-  ?csv=<CSV_URL>
-  &kiosk=1
-```
+### Old query links
 
-> ⚠️ Always **URL-encode** the CSV URL when passing it as a parameter.
+Older versions used ?csv=... links. They still open for compatibility and are
+immediately rewritten to the fragment form in the address bar.
 
----
+Replace old bookmarks and shared links with the rewritten version. The query in
+an old link has already been transmitted with its first page request; rewriting
+it afterward cannot undo that exposure.
 
-## 🖥️ Fullscreen behavior (important)
+## 🔒 Privacy and security model
 
-Due to browser security rules:
+Link Launcher is private-by-default only in this limited sense:
 
-* Fullscreen **cannot be forced automatically**
-* A **single user tap** is required
+- The bare app URL loads no CSV.
+- The CSV address is not hard-coded in the current source.
+- The fragment is not sent in the GitHub Pages request or ordinary referrer
+  headers.
+- CSV contents and addresses are not saved in localStorage, IndexedDB, or Cache
+  Storage by this app.
+- Older Link Launcher localStorage cache entries are deleted when the updated
+  app is opened.
 
-What Link Launcher does instead:
+This is still an **unlisted bearer link**, not access control:
 
-1. On first visit:
+- Anyone with the complete launcher link can open it.
+- Anyone with the underlying published CSV URL can read the spreadsheet
+  directly without signing in.
+- The complete launcher link may remain in browser history, bookmark sync,
+  screenshots, extensions, or messages where it was shared.
+- Cached copies on devices that never open the updated app cannot be erased
+  remotely.
 
-   * Asks once whether fullscreen should be used
-2. Saves the choice locally
-3. On later visits:
+If the data must be restricted to particular people, stop publishing the sheet
+and use a private source with real authentication, such as Google OAuth plus
+the Sheets API or an authenticated backend. A password embedded in this public
+repository would not provide security.
 
-   * Shows a minimal **“Tap to start”** screen
-   * Enters fullscreen immediately on tap
+If a CSV address was previously committed or shared, treat it as exposed.
+Removing it from the latest source does not remove it from Git history or other
+copies. Unpublish or revoke that source before using the app for anything
+sensitive.
 
-This is the **maximum possible automation** allowed by modern browsers.
+## 🖥️ Fullscreen, bookmarks, and installation
 
-### iOS tip (recommended)
+Browsers require a user gesture before entering fullscreen. Use the floating
+button to enter or leave fullscreen.
 
-For the best fullscreen experience on iPhone/iPad:
+The shared web manifest intentionally starts at the unconfigured app root. It
+does not contain a private CSV address. On browsers that install the manifest
+as an app, launching that installed app therefore opens the safe setup screen,
+not a configured launcher. Bookmark the complete fragment-based launcher URL
+if you need to reopen that configuration.
 
-* Open the page in Safari
-* Use **“Add to Home Screen”**
-* Launch from the home screen
+## 🛠️ Deploy on GitHub Pages
 
-This removes most browser UI and feels like a native app.
-
----
-
-## 🛠️ Installation (GitHub Pages)
-
-1. Create a new GitHub repository
-2. Add the provided `index.html` to the root
-3. Go to **Settings → Pages**
-4. Deploy from:
-
-   * Branch: `main`
-   * Folder: `/ (root)`
-5. Open your GitHub Pages URL 🎉
-
----
-
-## 🧪 Example
-
-```
-https://yourname.github.io/link-launcher/
-  ?csv=https%3A%2F%2Fdocs.google.com%2Fspreadsheets%2F...%2Foutput%3Dcsv
-  &title=CAP%20Showing
-  &kiosk=1
-```
-
----
-
-## 🔒 Privacy
-
-* No tracking
-* No cookies
-* No analytics
-* Only uses:
-
-  * `fetch()` to read a public CSV
-  * `localStorage` to remember fullscreen preference
-
----
-
-## 🧩 Possible extensions
-
-If you want to extend this project later, easy additions include:
-
-* Third column for **button colors or categories**
-* Long-press / double-tap actions
-* Auto-refreshing the CSV
-* Password-protected CSV proxy
-* Offline cache
-* PWA install support
-
----
+1. Create a repository containing these files.
+2. In **Settings → Pages**, deploy from the main branch and repository root.
+3. Open the Pages URL and use the setup helper to create your launcher link.
 
 ## 📄 License
 
-MIT License
-Use freely for artistic, educational, and commercial purposes.
-
----
+MIT License. Use freely for artistic, educational, and commercial purposes.
 
 ## [📝 To-Do](https://trello.com/c/AqaKqLdD/51-linklauncher)

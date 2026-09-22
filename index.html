@@ -1,29 +1,29 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://docs.google.com https://*.googleusercontent.com; img-src 'self' data:; manifest-src 'self'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>Link Launcher</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#000000">
-  
-  <!-- iOS home screen icon + standalone feel -->
+
   <link rel="apple-touch-icon" href="./apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
 
   <style>
     :root {
       --bg: #000;
       --fg: #fff;
+      --muted: #aaa;
       --tile-bg: #111;
       --tile-bg-hover: #1a1a1a;
       --tile-border: #2a2a2a;
       --gap: clamp(10px, 2.2vw, 18px);
       --radius: 18px;
       --shadow: 0 10px 30px rgba(0,0,0,.45);
-
       --fab-bg: rgba(20,20,20,.9);
       --fab-border: rgba(255,255,255,.12);
     }
@@ -44,7 +44,7 @@
     }
 
     header {
-      padding: 14px 16px 0 16px;
+      padding: 14px 16px 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -65,7 +65,6 @@
       white-space: nowrap;
     }
 
-    /* Kiosk mode hides header: ?kiosk=1 */
     body.kiosk header { display: none; }
 
     main {
@@ -75,7 +74,6 @@
       gap: var(--gap);
       align-content: stretch;
       justify-content: stretch;
-      /* columns set dynamically via JS */
     }
 
     .tile {
@@ -86,25 +84,21 @@
       text-decoration: none;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
-
       background: var(--tile-bg);
       border: 1px solid var(--tile-border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
-
       padding: 14px;
       font-weight: 700;
       color: var(--fg);
-
       min-height: 90px;
       font-size: clamp(14px, 2.8vw, 26px);
       line-height: 1.1;
-
       transition: transform .08s ease, background .08s ease;
     }
 
     .tile:active {
-      transform: scale(0.985);
+      transform: scale(.985);
       background: var(--tile-bg-hover);
     }
 
@@ -113,17 +107,17 @@
       outline-offset: 3px;
     }
 
-    /* Overlay for errors only (we don't block startup if cache exists) */
     #overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,.85);
+      background: rgba(0,0,0,.88);
       display: none;
       align-items: center;
       justify-content: center;
       padding: 18px;
       z-index: 50;
     }
+
     #overlay.show { display: flex; }
 
     .card {
@@ -131,75 +125,81 @@
       background: #0d0d0d;
       border: 1px solid #2a2a2a;
       border-radius: 18px;
-      padding: 16px;
+      padding: 18px;
       box-shadow: 0 20px 60px rgba(0,0,0,.55);
     }
 
     .card h2 {
-      margin: 0 0 8px 0;
-      font-size: 18px;
+      margin: 0 0 8px;
+      font-size: 19px;
     }
 
     .card p {
       margin: 8px 0;
       font-size: 14px;
-      line-height: 1.35;
+      line-height: 1.45;
       opacity: .92;
       word-break: break-word;
       white-space: pre-wrap;
     }
 
+    #overlayHint {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    #overlayText:empty,
+    #overlayHint:empty { display: none; }
+
     .row {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
-      margin-top: 12px;
+      margin-top: 14px;
     }
 
-    button {
+    button,
+    .button-link {
       appearance: none;
       border: 1px solid #2a2a2a;
       background: #161616;
       color: white;
-      padding: 10px 12px;
+      padding: 10px 13px;
       border-radius: 12px;
+      font: inherit;
       font-weight: 650;
       cursor: pointer;
+      text-decoration: none;
     }
 
-    button:active { transform: scale(0.99); }
-    button:hover { background: #1c1c1c; }
+    button:active,
+    .button-link:active { transform: scale(.99); }
 
-    /* Floating fullscreen button */
+    button:hover,
+    .button-link:hover { background: #1c1c1c; }
+
     #fullscreenBtn {
       position: fixed;
       right: 12px;
       bottom: 12px;
       z-index: 40;
-
       display: inline-flex;
       align-items: center;
       gap: 8px;
-
       padding: 10px 12px;
       border-radius: 999px;
-
       background: var(--fab-bg);
       border: 1px solid var(--fab-border);
       color: var(--fg);
-
       font-weight: 700;
       font-size: 13px;
-
       box-shadow: 0 12px 30px rgba(0,0,0,.45);
       backdrop-filter: blur(6px);
-
       user-select: none;
       -webkit-tap-highlight-color: transparent;
     }
 
-    #fullscreenBtn:active { transform: scale(0.985); }
-    #fullscreenBtn.hidden { display: none; }
+    #fullscreenBtn:active { transform: scale(.985); }
   </style>
 </head>
 
@@ -216,323 +216,18 @@
     ⛶ Fullscreen
   </button>
 
-  <div id="overlay" role="dialog" aria-modal="true" aria-label="Status overlay">
+  <div id="overlay" role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
     <div class="card">
-      <h2 id="overlayTitle">Couldn’t load CSV</h2>
-      <p id="overlayText">Fetch failed. Make sure the Google Sheet is published as CSV and the URL is public.</p>
-      <p id="overlayHint" style="opacity:.75"></p>
+      <h2 id="overlayTitle">Link Launcher</h2>
+      <p id="overlayText"></p>
+      <p id="overlayHint"></p>
       <div class="row" id="overlayActions"></div>
     </div>
   </div>
 
-<script>
-(() => {
-  const params = new URLSearchParams(location.search);
-
-  // Optional: kiosk mode (hides header). Use ?kiosk=1
-  const kiosk = params.get("kiosk") === "1";
-  if (kiosk) document.body.classList.add("kiosk");
-
-  // Default CSV (replace if you want)
-  const DEFAULT_CSV =
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgmBOH1S8hMprCGM9X5v6sJwzPDj_EhHgrsiIGW97Nr7l7TzvQ2i5CuXT5Fg_zOpPDdjqCJM_LooFM/pub?gid=0&single=true&output=csv";
-
-  const csvUrl = params.get("csv") || DEFAULT_CSV;
-  const title = params.get("title") || "Link Launcher";
-
-  document.title = title;
-  document.getElementById("pageTitle").textContent = title;
-
-  const grid = document.getElementById("grid");
-  const meta = document.getElementById("meta");
-
-  // ---------------------------
-  // Overlay (errors only)
-  // ---------------------------
-  const overlay = document.getElementById("overlay");
-  const overlayHint = document.getElementById("overlayHint");
-  const overlayActions = document.getElementById("overlayActions");
-
-  function showErrorOverlay({ hint = "", actions = [] }) {
-    overlayHint.textContent = hint;
-    overlayActions.innerHTML = "";
-    for (const a of actions) {
-      const btn = document.createElement("button");
-      btn.textContent = a.label;
-      btn.addEventListener("click", a.onClick);
-      overlayActions.appendChild(btn);
-    }
-    overlay.classList.add("show");
-  }
-
-  function hideOverlay() {
-    overlay.classList.remove("show");
-  }
-
-  // ---------------------------
-  // Fullscreen button
-  // ---------------------------
-  const fullscreenBtn = document.getElementById("fullscreenBtn");
-
-  async function requestFullscreen() {
-    const el = document.documentElement;
-    if (!document.fullscreenElement && el.requestFullscreen) {
-      try { await el.requestFullscreen(); } catch (_) {}
-    }
-  }
-
-  async function exitFullscreen() {
-    if (document.fullscreenElement && document.exitFullscreen) {
-      try { await document.exitFullscreen(); } catch (_) {}
-    }
-  }
-
-  function updateFullscreenButton() {
-    const inFs = !!document.fullscreenElement;
-    fullscreenBtn.textContent = inFs ? "⤫ Exit fullscreen" : "⛶ Fullscreen";
-  }
-
-  fullscreenBtn.addEventListener("click", async () => {
-    if (document.fullscreenElement) await exitFullscreen();
-    else await requestFullscreen();
-    updateFullscreenButton();
-  });
-
-  document.addEventListener("fullscreenchange", updateFullscreenButton);
-  updateFullscreenButton();
-
-  // ---------------------------
-  // CSV parser (supports quotes)
-  // ---------------------------
-  function parseCSV(text) {
-    const rows = [];
-    let i = 0, field = "", row = [], inQuotes = false;
-
-    while (i < text.length) {
-      const c = text[i];
-
-      if (inQuotes) {
-        if (c === '"') {
-          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
-          inQuotes = false; i++; continue;
-        }
-        field += c; i++; continue;
-      } else {
-        if (c === '"') { inQuotes = true; i++; continue; }
-        if (c === ',') { row.push(field); field = ""; i++; continue; }
-        if (c === '\n') {
-          row.push(field); field = "";
-          rows.push(row);
-          row = [];
-          i++; continue;
-        }
-        if (c === '\r') { i++; continue; }
-        field += c; i++; continue;
-      }
-    }
-
-    if (field.length || row.length) {
-      row.push(field);
-      rows.push(row);
-    }
-    return rows;
-  }
-
-  function unwrapGoogleRedirect(url) {
-    try {
-      const u = new URL(url);
-      if (u.hostname === "www.google.com" && u.pathname === "/url") {
-        const q = u.searchParams.get("q");
-        if (q) return q;
-      }
-    } catch (_) {}
-    return url;
-  }
-
-  function parseItemsFromCSVText(text) {
-    const rows = parseCSV(text)
-      .map(r => [ (r[0] || "").trim(), (r[1] || "").trim() ])
-      .filter(([label, url]) => label && url);
-
-    return rows.map(([label, url]) => ({
-      label,
-      url: unwrapGoogleRedirect(url)
-    }));
-  }
-
-  // ---------------------------
-  // Layout
-  // ---------------------------
-  function setGridColumns(count) {
-    let cols = Math.ceil(Math.sqrt(count || 1));
-    cols = Math.max(1, Math.min(cols, 6));
-
-    const w = Math.min(window.innerWidth, window.screen?.width || window.innerWidth);
-    if (w < 420) cols = Math.min(cols, 2);
-    else if (w < 720) cols = Math.min(cols, 3);
-
-    grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-  }
-
-  function buildTiles(items, { sourceLabel = "" } = {}) {
-    grid.innerHTML = "";
-    setGridColumns(items.length);
-
-    for (const item of items) {
-      const a = document.createElement("a");
-      a.className = "tile";
-      a.textContent = item.label;
-      a.href = item.url;
-      a.target = "_self";
-      a.rel = "noopener";
-      grid.appendChild(a);
-    }
-
-    const n = items.length;
-    const suffix = sourceLabel ? ` • ${sourceLabel}` : "";
-    meta.textContent = `${n} link${n === 1 ? "" : "s"}${suffix}`;
-  }
-
-  window.addEventListener("resize", () => {
-    const count = grid.children.length || 1;
-    setGridColumns(count);
-  });
-
-  // ---------------------------
-  // Cache (stale-while-revalidate)
-  // Cache is keyed per CSV URL so multiple launchers can coexist.
-  // ---------------------------
-  function cacheKeyFor(url) {
-    return "linkLauncher.cache.v1." + encodeURIComponent(url);
-  }
-
-  function loadCache(url) {
-    try {
-      const raw = localStorage.getItem(cacheKeyFor(url));
-      if (!raw) return null;
-      const obj = JSON.parse(raw);
-      if (!obj || !Array.isArray(obj.items)) return null;
-      return obj;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function saveCache(url, items) {
-    try {
-      const obj = { ts: Date.now(), items };
-      localStorage.setItem(cacheKeyFor(url), JSON.stringify(obj));
-    } catch (_) {
-      // ignore storage errors (private mode / quota)
-    }
-  }
-
-  function formatAge(ts) {
-    if (!ts) return "";
-    const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-    if (s < 60) return `${s}s ago`;
-    const m = Math.floor(s / 60);
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    return `${h}h ago`;
-  }
-
-  // Compare items to decide whether to re-render
-  function sameItems(a, b) {
-    if (!Array.isArray(a) || !Array.isArray(b)) return false;
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (a[i].label !== b[i].label) return false;
-      if (a[i].url !== b[i].url) return false;
-    }
-    return true;
-  }
-
-  // ---------------------------
-  // Fetch fresh data
-  // ---------------------------
-  async function fetchCSVText(url) {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.text();
-  }
-
-  async function refreshInBackground({ hadCache }) {
-    try {
-      const text = await fetchCSVText(csvUrl);
-      const items = parseItemsFromCSVText(text);
-
-      if (!items.length) {
-        // If cache exists, keep it; otherwise show error overlay
-        if (!hadCache) {
-          showErrorOverlay({
-            hint: `No valid rows found.\nExpected: Column A = label, Column B = URL.\nCSV: ${csvUrl}`,
-            actions: [{ label: "Retry", onClick: () => location.reload() }]
-          });
-        }
-        return;
-      }
-
-      // Update UI only if changed vs what we currently show (or cache)
-      const current = loadCache(csvUrl);
-      const currentItems = current?.items || null;
-
-      saveCache(csvUrl, items);
-
-      // If the visible grid is already built from cache, update if it changed.
-      if (!sameItems(items, currentItems)) {
-        buildTiles(items, { sourceLabel: "live" });
-      } else {
-        // Still update meta label to show it's live
-        const n = items.length;
-        meta.textContent = `${n} link${n === 1 ? "" : "s"} • live`;
-      }
-
-      hideOverlay();
-    } catch (err) {
-      // If no cache, show error overlay; if cache exists, silently keep going.
-      if (!hadCache) {
-        showErrorOverlay({
-          hint: `Error: ${String(err)}\nCSV: ${csvUrl}`,
-          actions: [{ label: "Retry", onClick: () => location.reload() }]
-        });
-      } else {
-        // Optional: show a tiny hint in meta that we are offline/stale
-        const cached = loadCache(csvUrl);
-        if (cached?.items?.length) {
-          const n = cached.items.length;
-          meta.textContent = `${n} link${n === 1 ? "" : "s"} • cached (${formatAge(cached.ts)})`;
-        }
-      }
-    }
-  }
-
-  // ---------------------------
-  // Startup
-  // ---------------------------
-  function start() {
-    // 1) Render cached immediately if available
-    const cached = loadCache(csvUrl);
-    if (cached?.items?.length) {
-      buildTiles(cached.items, { sourceLabel: `cached (${formatAge(cached.ts)})` });
-      // no blocking overlay
-      hideOverlay();
-      // 2) Refresh in background
-      refreshInBackground({ hadCache: true });
-    } else {
-      // No cache: show overlay while loading
-      showErrorOverlay({
-        hint: `Loading…\nCSV: ${csvUrl}`,
-        actions: []
-      });
-      // Use the same overlay element; we'll hide it on success
-      // (We reuse the error overlay styling to avoid duplicating UI.)
-      refreshInBackground({ hadCache: false });
-    }
-  }
-
-  start();
-})();
-</script>
+  <noscript>
+    <p>This app needs JavaScript to load a configured CSV.</p>
+  </noscript>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

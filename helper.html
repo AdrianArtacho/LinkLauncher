@@ -1,9 +1,11 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Link Launcher – URL Helper</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Link Launcher – Setup Helper</title>
 
   <style>
     :root {
@@ -12,7 +14,9 @@
       --muted: #aaa;
       --card: #111;
       --border: #2a2a2a;
-      --accent: #4da3ff;
+      --accent: #8ec5ff;
+      --warning: #f4cf78;
+      --danger: #ff9a9a;
       --radius: 16px;
     }
 
@@ -30,23 +34,32 @@
     }
 
     h1 {
-      margin: 0 0 12px 0;
+      margin: 0 0 12px;
       font-size: 24px;
     }
 
     p {
       margin: 8px 0 16px;
       color: var(--muted);
-      line-height: 1.4;
+      line-height: 1.45;
     }
 
-    .card {
+    .card,
+    .notice {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 16px;
       margin-bottom: 18px;
     }
+
+    .notice {
+      border-color: #554820;
+      color: var(--warning);
+      line-height: 1.45;
+    }
+
+    .notice strong { color: #ffe4a3; }
 
     label {
       display: block;
@@ -55,7 +68,8 @@
       color: var(--muted);
     }
 
-    input, textarea {
+    input[type="text"],
+    textarea {
       width: 100%;
       box-sizing: border-box;
       background: #0b0b0b;
@@ -67,9 +81,20 @@
     }
 
     textarea {
-      min-height: 80px;
+      min-height: 90px;
       resize: vertical;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .check-row label {
+      margin: 0;
+      color: var(--fg);
     }
 
     .row {
@@ -90,10 +115,16 @@
       cursor: pointer;
     }
 
-    button:hover { background: #1c1c1c; }
-    button:active { transform: scale(0.98); }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .45;
+    }
+
+    button:hover:not(:disabled) { background: #1c1c1c; }
+    button:active:not(:disabled) { transform: scale(.98); }
 
     .result {
+      min-height: 19px;
       word-break: break-all;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 13px;
@@ -103,10 +134,20 @@
       border: 1px solid var(--border);
     }
 
+    .error {
+      min-height: 20px;
+      margin: 8px 0 0;
+      color: var(--danger);
+      font-size: 13px;
+    }
+
+    .error:empty { display: none; }
+
     a.result-link {
       color: var(--accent);
       text-decoration: none;
-      font-weight: 600;
+      font-weight: 650;
+      padding: 10px 2px;
     }
 
     footer {
@@ -120,86 +161,53 @@
 
 <body>
 <main>
-  <h1>Link Launcher – URL Helper</h1>
+  <h1>Link Launcher – Setup Helper</h1>
   <p>
-    Paste a <strong>Google Sheets CSV URL</strong> here.  
-    This tool will generate a <strong>correctly encoded</strong> LinkLauncher URL.
+    Create a launcher URL from a published Google Sheets CSV. The helper does
+    not upload or save what you enter.
   </p>
 
+  <div class="notice">
+    <strong>Important:</strong> this creates an unlisted access link, not a
+    password. Anyone who gets the complete launcher link can open the public CSV.
+    Do not publish personal, student, or otherwise confidential data this way.
+  </div>
+
   <div class="card">
-    <label for="csv">Google Sheets CSV URL</label>
-    <textarea id="csv" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?gid=0&single=true&output=csv"></textarea>
+    <label for="csv">Published Google Sheets CSV URL</label>
+    <textarea id="csv" spellcheck="false" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?gid=0&amp;single=true&amp;output=csv"></textarea>
   </div>
 
   <div class="card">
     <label for="title">Page title (optional)</label>
-    <input id="title" type="text" placeholder="e.g. Strohgasse">
+    <input id="title" type="text" maxlength="120" placeholder="e.g. Strohgasse">
   </div>
 
   <div class="card">
-    <label>Generated LinkLauncher URL</label>
-    <div id="result" class="result">—</div>
+    <div class="check-row">
+      <input id="kiosk" type="checkbox">
+      <label for="kiosk">Kiosk mode (hide the header)</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Generated Link Launcher URL</label>
+    <div id="result" class="result" aria-live="polite">—</div>
+    <p id="error" class="error" role="alert"></p>
     <div class="row">
-      <button id="copyBtn" disabled>Copy URL</button>
-      <a id="openLink" class="result-link" href="#" target="_blank" style="display:none;">
-        Open Link
+      <button id="copyBtn" type="button" disabled>Copy URL</button>
+      <a id="openLink" class="result-link" href="#" target="_blank" rel="noopener noreferrer" hidden>
+        Open launcher
       </a>
     </div>
   </div>
 
   <footer>
-    Tip: always publish your Google Sheet as <strong>CSV</strong> before using it here.
+    The CSV address is placed after # so it is not sent to GitHub Pages in the
+    page request. It can still be visible in browser history and copied links.
   </footer>
 </main>
 
-<script>
-(() => {
-  const csvEl = document.getElementById("csv");
-  const titleEl = document.getElementById("title");
-  const resultEl = document.getElementById("result");
-  const copyBtn = document.getElementById("copyBtn");
-  const openLink = document.getElementById("openLink");
-
-  // Base URL = same folder as helper.html
-  const baseUrl = location.origin + location.pathname.replace(/helper\.html$/, "");
-
-  function update() {
-    const csv = csvEl.value.trim();
-    const title = titleEl.value.trim();
-
-    if (!csv) {
-      resultEl.textContent = "—";
-      copyBtn.disabled = true;
-      openLink.style.display = "none";
-      return;
-    }
-
-    const encodedCSV = encodeURIComponent(csv);
-    let url = `${baseUrl}?csv=${encodedCSV}`;
-
-    if (title) {
-      url += `&title=${encodeURIComponent(title)}`;
-    }
-
-    resultEl.textContent = url;
-    openLink.href = url;
-    openLink.style.display = "inline";
-    copyBtn.disabled = false;
-  }
-
-  csvEl.addEventListener("input", update);
-  titleEl.addEventListener("input", update);
-
-  copyBtn.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(resultEl.textContent);
-      copyBtn.textContent = "Copied!";
-      setTimeout(() => (copyBtn.textContent = "Copy URL"), 1200);
-    } catch {
-      alert("Copy failed – please copy manually.");
-    }
-  });
-})();
-</script>
+<script type="module" src="./helper.js"></script>
 </body>
 </html>
